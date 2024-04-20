@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="de">
+    <head>
+        <meta charset="UTF-8">
+        <title>Einfaches KI-Modell Training für Anfänger</title>
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <link
+            href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+            rel="stylesheet">
+
+        <style>
+            body,
+            html {
+                height: 100%;
+                /* Stellen Sie sicher, dass HTML und Body die gesamte Höhe einnehmen */
+                margin: 0;
+                display: flex;
+                flex-direction: column;
+            }
+            .container {
+                flex: 1;
+                /* Erlaubt dem Container, den verfügbaren Platz einzunehmen */
+            }
+            .footer {
+                width: 100%;
+                height: 50px;
+                padding: 50px 0;
+                background-color: black;
+                color: white;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 16px;
+                /* Sie können die Schriftgröße anpassen, wie gewünscht */
+            }
+        </style>
+
+    </head>
+    <body class="bg-gray-100">
+        <div class="container mx-auto px-4 py-10">
+            <h1 class="text-xl font-semibold text-gray-800 mb-4">Modell Training</h1>
+            <div class="bg-white p-6 rounded shadow">
+                <canvas id="myChart"></canvas>
+            </div>
+            <div
+                class="bg-white p-6 rounded shadow mt-4"
+                title="Dieses Diagramm zeigt den Trainingsverlust nach jeder Epoche. Ein fallender Verlustwert zeigt eine Verbesserung der Modellgenauigkeit an.">
+                <canvas id="lossChart"></canvas>
+            </div>
+            <button
+                onclick="startTraining()"
+                class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mt-4">
+                Start Training
+            </button>
+            <button
+                onclick="trainStepByStep()"
+                class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ml-2">
+                Trainiere Schritt für Schritt
+            </button>
+            <p id="training-status" class="text-center mt-4 text-lg text-blue-600">Bereit zu trainieren!</p>
+            <p
+                id="weightDisplay"
+                class="text-center mt-4 text-lg text-purple-600"
+                title="Diese Anzeige zeigt die aktuellen Netzwerkparameter des Modells. Diese Netzwerkparameter sind wesentliche Parameter, die während des Trainings angepasst werden, um die beste Übereinstimmung zwischen den vorhergesagten und den tatsächlichen Y-Werten zu erreichen. Änderungen in diesen Netzwerkparametern reflektieren den Lernfortschritt des Modells.">
+                Netzwerkparameter: 0
+            </p>
+            <div class="mt-4">
+                <label for="inputX" class="block text-gray-700 text-sm font-bold mb-2">Eingabe X-Wert:</label>
+                <input
+                    id="inputX"
+                    type="text"
+                    placeholder="Geben Sie einen X-Wert ein"
+                    class="shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                <button
+                    onclick="makePrediction()"
+                    class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ml-2">
+                    Vorhersagen
+                </button>
+            </div>
+            <!-- Modal -->
+            <div
+                id="predictionModal"
+                class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center">
+                <div class="bg-white p-6 rounded shadow-lg max-w-sm">
+                    <h3 class="font-bold text-lg">Vorhersageergebnis</h3>
+                    <p id="predictionResult" class="text-gray-800 my-4"></p>
+                    <button
+                        onclick="closeModal()"
+                        class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                        Schließen
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="footer">
+            e-Learning Express 2024
+        </div>
+
+        <script>
+            const xs = tf.tensor1d([
+                -1.0,
+                0.0,
+                1.0,
+                2.0,
+                3.0,
+                4.0
+            ]);
+            const ys = tf.tensor1d([
+                -3.0,
+                -1.0,
+                1.0,
+                3.0,
+                5.0,
+                7.0
+            ]);
+
+            const model = tf.sequential();
+            model.add(tf.layers.dense({units: 1, inputShape: [1]}));
+            model.compile({optimizer: 'sgd', loss: 'meanSquaredError'});
+            let currentEpoch = 0;
+            let lossHistory = [];
+
+            async function startTraining() {
+                try {
+                    await model.fit(xs, ys, {
+                        epochs: 250,
+                        callbacks: {
+                            onEpochEnd: (epoch, log) => {
+                                updateLossChart(epoch, log.loss);
+                                updateWeightDisplay();
+                                document
+                                    .getElementById('training-status')
+                                    .textContent = `Training läuft... Epoche ${epoch + 1}`;
+                            }
+                        }
+                    });
+                    document
+                        .getElementById('training-status')
+                        .textContent = 'Das wurde Modell trainiert!';
+                    plotData();
+                } catch (error) {
+                    console.error('Ein Fehler ist aufgetreten:', error);
+                    document
+                        .getElementById('training-status')
+                        .textContent = 'Fehler beim Training!';
+                }
+            }
+
+            async function trainStepByStep() {
+                if (currentEpoch < 250) {
+                    await model.fit(xs, ys, {
+                        epochs: 1,
+                        callbacks: {
+                            onEpochEnd: (epoch, log) => {
+                                updateLossChart(currentEpoch, log.loss);
+                                updateWeightDisplay();
+                                document
+                                    .getElementById('training-status')
+                                    .textContent = `Training läuft... Epoch ${currentEpoch + 1}`;
+                                currentEpoch++;
+                            }
+                        }
+                    });
+                } else {
+                    document
+                        .getElementById('training-status')
+                        .textContent = 'Modell ist trainiert!';
+                    plotData();
+                }
+            }
+
+            function updateLossChart(epoch, loss) {
+                lossHistory.push(loss);
+                const ctxLoss = document
+                    .getElementById('lossChart')
+                    .getContext('2d');
+                if (window.lossChart && typeof window.lossChart.destroy === 'function') {
+                    window
+                        .lossChart
+                        .destroy();
+                }
+                window.lossChart = new Chart(ctxLoss, {
+                    type: 'line',
+                    data: {
+                        labels: Array.from({
+                            length: epoch + 1
+                        }, (_, i) => i + 1),
+                        datasets: [
+                            {
+                                label: 'Trainingsverlust ',
+                                data: lossHistory,
+                                borderColor: 'red',
+                                backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                                fill: false
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        title: {
+                            display: true,
+                            text: 'Loss Progression'
+                        }
+                    }
+                });
+            }
+
+            function updateWeightDisplay() {
+                const weights = model.getWeights();
+                const weightTensor = weights[0];
+                weightTensor
+                    .data()
+                    .then(data => {
+                        document
+                            .getElementById('weightDisplay')
+                            .textContent = `Aktuelle Netzwerkparameter: ${data[0]
+                            .toFixed(3)}`;
+                    });
+            }
+
+            async function plotData() {
+                const predsYs = model.predict(xs);
+                const predsYsData = await predsYs.data();
+                const ctx = document
+                    .getElementById('myChart')
+                    .getContext('2d');
+                if (window.myChart && typeof window.myChart.destroy === 'function') {
+                    window
+                        .myChart
+                        .destroy();
+                }
+                window.myChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [
+                            -1.0,
+                            0.0,
+                            1.0,
+                            2.0,
+                            3.0,
+                            4.0
+                        ],
+                        datasets: [
+                            {
+                                label: 'Vorhersage',
+                                data: predsYsData,
+                                borderColor: 'blue',
+                                backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                                fill: false
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            }
+
+            function makePrediction() {
+                const inputX = document
+                    .getElementById('inputX')
+                    .value
+                    .trim();
+                if (inputX === "") {
+                    alert("Bitte geben Sie einen X-Wert ein.");
+                    return;
+                }
+                const inputTensor = tf.tensor1d([parseFloat(inputX)]);
+                const predictedYs = model.predict(inputTensor);
+                predictedYs
+                    .data()
+                    .then(data => {
+                        document
+                            .getElementById('predictionResult')
+                            .textContent = `Vorhergesagter Y-Wert für ${inputX} ist ${data[0]
+                            .toFixed(2)}`;
+                        openModal();
+                    });
+            }
+
+            function openModal() {
+                document
+                    .getElementById('predictionModal')
+                    .classList
+                    .remove('hidden');
+            }
+
+            function closeModal() {
+                document
+                    .getElementById('predictionModal')
+                    .classList
+                    .add('hidden');
+            }
+        </script>
+    </body>
+</html>
